@@ -7,6 +7,7 @@ import asyncio
 from config import PARTS_PROMT, CARDS_PROMT, BORDERLINES_PROMT, CARDS_PROMT2
 from langchain_anthropic import ChatAnthropic
 from langchain_openai import ChatOpenAI
+from langchain_deepseek import ChatDeepSeek
 from langchain.prompts import PromptTemplate
 from langchain_core.output_parsers import StrOutputParser, JsonOutputParser
 import json
@@ -18,22 +19,25 @@ load_dotenv()
 DEEPGRAM_API_KEY = os.getenv('DEEPGRAM_API_KEY')
 CLAUDE_API_KEY = os.getenv('CLAUDE_API_KEY')
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+DEEPSEEK_API_KEY = os.getenv('DEEPSEEK_API_KEY')
 
 class AiModel:
     def __init__(self, model):
-        self.llm = "claude-3-5-sonnet-20240620"
+        self.llm = self.get_model(model)
 
-    def get_model(self):
+    def get_model(self, model):
         models = {
             "claude-3-5-sonnet-20240620": ChatAnthropic(api_key=CLAUDE_API_KEY, model_name="claude-3-5-sonnet-20240620", max_tokens=8192),
-            "claude-3-7-sonnet-latest": ChatAnthropic(api_key=CLAUDE_API_KEY, model="claude-3-7-sonnet-latest", max_tokens=100000, thinking={"type": "enabled", "budget_tokens": 5000}),
-            "OpenAI": ChatOpenAI(api_key=OPENAI_API_KEY, model="o3-mini-2025-01-31")
+            "claude-3-7-sonnet-latest": ChatAnthropic(api_key=CLAUDE_API_KEY, model="claude-3-7-sonnet-latest", max_tokens=20000, thinking={"type": "enabled", "budget_tokens": 5000}),
+            "OpenAI": ChatOpenAI(api_key=OPENAI_API_KEY, model="o3-mini-2025-01-31"),
+            "DeepSeek": ChatDeepSeek(api_key=DEEPSEEK_API_KEY, model="deepseek-chat")
         }
-        return models[self.llm]
+        return models[model]
 
 
 class Course(AiModel):
     def __init__(self, course_file):
+        super().__init__(model="DeepSeek")  # Вызов конструктора родительского класса
         self.course = course_file
         self.dg_client = DeepgramClient(DEEPGRAM_API_KEY)
 
@@ -138,11 +142,11 @@ class Course(AiModel):
                 start_boundary = subtopic['starts']
                 end_boundary = subtopic['ends']
                 boundaries[segment_name] = [start_boundary, end_boundary]
-        print('BOUNDARIES!!!')
+        print(f'BOUNDARIES!!! Total elements: {len(boundaries)}')
         return boundaries
 
 
-    def get_segment(self, text, boundaries):
+    '''def get_segment(self, text, boundaries):
         segments = {}
         for name_segment in boundaries:
             start_index = text.find(boundaries[name_segment][0])
@@ -150,6 +154,29 @@ class Course(AiModel):
             end_index = text.find(boundaries[name_segment][1], start_index) + len(boundaries[name_segment][1])
             print(f'end_ind: {end_index}')
             segments[name_segment] = text[start_index:end_index ]
+        print('SEGMENTS!!!')
+        return segments'''
+
+    def get_segment(self, text, boundaries):
+        segments = {}
+        previous_end_index = -1  # Инициализация предыдущего конечного индекса
+
+        for name_segment in boundaries:
+            start_index = text.find(boundaries[name_segment][0], previous_end_index + 1)
+            if start_index == -1:
+                continue  # Пропустить сегмент, если начальный индекс не найден
+
+            end_index = text.find(boundaries[name_segment][1], start_index) + len(boundaries[name_segment][1])
+            if end_index == -1:
+                continue  # Пропустить сегмент, если конечный индекс не найден
+
+            if start_index > previous_end_index and end_index > start_index:
+                segments[name_segment] = text[start_index:end_index]
+                previous_end_index = end_index  # Обновление предыдущего конечного индекса
+
+            print(f'start_ind: {start_index}')
+            print(f'end_ind: {end_index}')
+
         print('SEGMENTS!!!')
         return segments
 
